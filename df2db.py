@@ -18,6 +18,7 @@ This module can be used to add from a parent folder all the excel files to a sql
 The class requires the database name and the path where you have the excel files.
 
 Warning: If it founds an .csv file it will save to database only the first sheet!
+Warning: It doesn't open .xlsm files
 Requires pandas module to be installed.
 
 """
@@ -71,7 +72,7 @@ class Df2db:
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
         extension = path_to_xlname[-4:]
         try:
-            if re.search('xlsx', extension) or re.search('xls', extension) or re.search('xlsm', extension):
+            if re.search('xlsx', extension) or re.search('xls', extension):
                 #If excel file then
                 xl = pd.ExcelFile(path_to_xlname)
                 for sht in xl.sheet_names:
