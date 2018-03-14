@@ -134,8 +134,7 @@ class Df2db:
                            
     def df2sql(self, df, dfname):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
-        print('conn si cursor ok\n', type(df), dfname)
-        input()
+        #print('conn si cursor ok\n', type(df), dfname)
         #Saving df to sqlite3 db
         df.to_sql(dfname, connection, if_exists="replace", index=False)
         connection.commit()
@@ -158,11 +157,11 @@ class Df2db:
         except:
             pass
         
-        input('trecut de trypass')
+        #input('trecut de trypass')
     
         if str(type(path_to_xlname)) == "<class 'pandas.core.frame.DataFrame'>":
 
-            input('recunoscut ca df')
+            #input('recunoscut ca df')
             
             Df2db(self.dbname, self.root_path).df2sql(path_to_xlname, dfname)
         
