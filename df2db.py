@@ -267,45 +267,45 @@ class Df2db:
             Df2db(self.dbname, self.root_path).df_tosql(df)
         #tab = Df2db(self.dbname, self.root_path).show_db_tables()
         
-#### Instantiating the class
-todf = Df2db('mydata.db', r'E:\sqlite3')      
+# #### Instantiating the class
+# todf = Df2db('mydata.db', r'E:\sqlite3')      
 
 
-# In[4]:
+# # In[4]:
 
 
-orase = pd.read_csv('orase.csv')
-jud_loc = orase[['JUDET', 'LOCALITATE']]
+# orase = pd.read_csv('orase.csv')
+# jud_loc = orase[['JUDET', 'LOCALITATE']]
 
 
-# In[22]:
+# # In[22]:
 
 
-todf.df_tosql(jud_loc, 'judloc')
+# todf.df_tosql(jud_loc, 'judloc')
 
 
-# In[35]:
+# # In[35]:
 
 
-todf.show_db_tables()
+# todf.show_db_tables()
 
 
-# In[36]:
+# # In[36]:
 
 
-todf.getdf_fromdb("judloc")
+# todf.getdf_fromdb("judloc")
 
 
-# In[26]:
+# # In[26]:
 
 
-todf.drop_tablefrom_db("orase_csv_ONSHEET_Sheet1")
+# todf.drop_tablefrom_db("orase_csv_ONSHEET_Sheet1")
 
 
 # In[27]:
 
 
-todf.show_db_tables()
+# todf.show_db_tables()
 
 
 # In[ ]:
