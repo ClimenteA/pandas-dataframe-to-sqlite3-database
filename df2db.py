@@ -13,22 +13,26 @@ import itertools
 # """
 
 class Df2db:
-    
+
     def __init__(self, dbname, root_path):
         self.dbname = dbname
-        self.root_path = root_path    
-    
+        self.root_path = root_path
+
     def connect_db(self):
         #Connect to a db and if it not exists creates one with the name given
-        connection = sqlite3.connect(self.dbname)
-        cursor = connection.cursor()
-        return connection, cursor
-    
+        try:
+            connection = sqlite3.connect(self.dbname)
+            cursor = connection.cursor()
+            return connection, cursor
+        except Exception as e:
+            return False, "Got error: {}".format(e)
+
     def close(self):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         connection.commit()
         connection.close()
-    
+
     def norm_pctmarks(self, astring):
         #Removing punctuation marks from the string, necessary for making compatible table names
         punctuation_marks = list(str(string.punctuation).replace('_', ''))+[' ']
@@ -38,48 +42,69 @@ class Df2db:
         except:
             pass
         return astring
-    
+
     def rename_duplicate_dfcols(self, df):
         #Rename DF columns if found duplicates (credit to SO"Lamakaha")
         try:
             cols=pd.Series(df.columns)
-            for dup in df.columns.get_duplicates(): 
+            for dup in df.columns.get_duplicates():
                 cols[df.columns.get_loc(dup)]=[dup+'.'+str(d_idx) if d_idx!=0 else dup for d_idx in range(df.columns.get_loc(dup).sum())]
                 df.columns=cols
         except Exception as e:
             print("Got ", e)
             pass
         return df
-    
-    
+
+    def prepcell(self, cell, tolist=False):
+        #Remove whitespaces/new line from the string and put words to list if needed
+        cell = str(cell).strip().replace('\n', ' ') # using replace to avoid POST\n156424 > POST156424
+        cellli = ''.join(cell).split(' ')
+        cellli = [c.strip() for c in cellli if len(c) != 0]
+
+        if tolist:
+            return cellli
+        else:
+            cellstr = ' '.join(cellli)
+        return cellstr
+
+    def stringifyDF(self, df):
+        #Clean cells and make all columns astype string
+        prepcell = Df2db(self.dbname, self.root_path).prepcell
+        columnsli = df.columns.tolist()
+        for col in columnsli:
+            df[col] = df[col].apply(lambda cell: prepcell(cell))
+        return df
+
     def save_tosql(self,connection, df_sht, sht, path_to_xlname):
-        
+
         xlname = path_to_xlname.strip().split('\\')[-1]
         try:
             tablename_insql = str(xlname + '_ONSHEET_' + sht)
         except:
             tablename_insql = str(xlname)
-        
+
         #Remove punctuation marks from table name
         tablename_insql = Df2db(self.dbname, self.root_path).norm_pctmarks(tablename_insql)
-        
-        #Dealing with txt files   
+
+        #Dealing with txt files
         ext = path_to_xlname.split('.')[-1]
         if ext == 'txt':
-            print(path_to_xlname)
+            #print(path_to_xlname)
             txt = open(path_to_xlname).read().splitlines()
             df = pd.Series(txt)
             df = pd.DataFrame({tablename_insql: df})
             #Saving df to sqlite3 db
+            df = Df2db(self.dbname, self.root_path).stringifyDF(df)
             df.to_sql(tablename_insql, connection, if_exists="replace", index=False)
             connection.commit()
-            print('{} ok'.format(tablename_insql))
-            
+            #print('{} ok'.format(tablename_insql))
+
         elif ext == 'csv':
-            
+
             df = pd.read_csv(path_to_xlname)
-    
-            #Replacing incompatible with sqlite3 chars with underscores 
+            df = Df2db(self.dbname, self.root_path).stringifyDF(df)
+
+            #Replacing incompatible with sqlite3 chars with underscores
             cols_names = df.columns.values
             new_cols_names = []
             for col in cols_names:
@@ -89,17 +114,18 @@ class Df2db:
             new_cols_names = [str(n).replace('___', '_') for n in new_cols_names]
             new_cols_names = [str(n).replace('__', '_') for n in new_cols_names]
             df.columns = new_cols_names
-            
+
             #Rename duplicate columns from df
             df = Df2db(self.dbname, self.root_path).rename_duplicate_dfcols(df)
-        
+
             #Saving df to sqlite3 db
+            df = Df2db(self.dbname, self.root_path).stringifyDF(df)
             df.to_sql(tablename_insql, connection, if_exists="replace", index=False)
             connection.commit()
-            print('{} ok'.format(tablename_insql))
-        
+            #print('{} ok'.format(tablename_insql))
+
         else:
-            #Replacing incompatible with sqlite3 chars with underscores 
+            #Replacing incompatible with sqlite3 chars with underscores
             cols_names = df_sht.columns.values
             new_cols_names = []
             for col in cols_names:
@@ -109,81 +135,89 @@ class Df2db:
             new_cols_names = [str(n).replace('___', '_') for n in new_cols_names]
             new_cols_names = [str(n).replace('__', '_') for n in new_cols_names]
             df_sht.columns = new_cols_names
-            
+
             #Rename duplicate columns from df
             df_sht = Df2db(self.dbname, self.root_path).rename_duplicate_dfcols(df_sht)
-        
+
             #Saving df to sqlite3 db
+            df_sht = Df2db(self.dbname, self.root_path).stringifyDF(df_sht)
             df_sht.to_sql(tablename_insql, connection, if_exists="replace", index=False)
             connection.commit()
-            print('{} ok'.format(tablename_insql))
-        
-        
-    
-    
+            #print('{} ok'.format(tablename_insql))
+
+
+
+
     def xl2sql(self, path_to_xlname):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         df = pd.ExcelFile(path_to_xlname)
+
         for sht in df.sheet_names:
             df_sht = df.parse(sht)
-            if df_sht.shape == (0,0): 
+            if df_sht.shape == (0,0):
                 pass
             else:
-                print("has")
+                #print("has")
                 Df2db(self.dbname, self.root_path).save_tosql(connection, df_sht,sht,path_to_xlname)
-                           
+
     def df2sql(self, df, dfname):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         #print('conn si cursor ok\n', type(df), dfname)
         #Saving df to sqlite3 db
+        df = Df2db(self.dbname, self.root_path).stringifyDF(df)
         df.to_sql(dfname, connection, if_exists="replace", index=False)
         connection.commit()
-        print('{} ok'.format(dfname))
+        #print('{} ok'.format(dfname))
         #Df2db(self.dbname, self.root_path).save_tosql(connection, df_sht,sht,path_to_xlname)
-        
+
     def csv2sql(self, path_to_xlname, df='', sht='Sheet1'):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         Df2db(self.dbname, self.root_path).save_tosql(connection, df, sht, path_to_xlname)
-        
+
     def txt2sql(self,path_to_txt, df='', sht=''):
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         Df2db(self.dbname, self.root_path).save_tosql(connection, df, sht, path_to_txt)
-        
-    
+
+
     def df_tosql(self, path_to_xlname, dfname=''):
         #Get thru all sheets and if it has data save it to db
         try:
             filename = path_to_xlname.split('\\')[-1]
         except:
             pass
-        
+
         #input('trecut de trypass')
-    
+
         if str(type(path_to_xlname)) == "<class 'pandas.core.frame.DataFrame'>":
 
             #input('recunoscut ca df')
-            
+
             Df2db(self.dbname, self.root_path).df2sql(path_to_xlname, dfname)
-        
+
         elif re.search('.xls', filename):
-            print('.xls')
+            #print('.xls')
             Df2db(self.dbname, self.root_path).xl2sql(path_to_xlname)
-                
-            
+
+
         elif re.search('.csv', filename):
-            print('.csv')
+            #print('.csv')
             Df2db(self.dbname, self.root_path).csv2sql(path_to_xlname)
-            
+
         elif re.search('.txt', filename):
-            print('.txt')
+            #print('.txt')
             Df2db(self.dbname, self.root_path).txt2sql(path_to_xlname)
-    
-    
-            
+
+
+
     def getdf_fromdb(self, table_name):
         #gets the table from the db
         #the table name must have this format excel_xlname_sheet_sheetname
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         query = "SELECT * FROM {}".format(table_name)
         df = pd.read_sql_query(query, connection)
         return df
@@ -191,25 +225,26 @@ class Df2db:
     def show_db_tables(self):
         #Shows all tables names from the db
         connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         all_tb = cursor.fetchall()
         all_tb = [x[0] for x in all_tb] # from [(table1, ) etc] makes [table1, etc]
-        column_name = '{}_TABLES'.format(self.dbname)
-        df = pd.DataFrame({column_name : all_tb})
-        try:
-            df.to_csv(column_name+'.csv', index=False)
-        except Exception as e:
-            input('CSV already openned please close it..\n {}'.format(e))
-            sys.exit()
-        print('{} tables in {}\n'.format(len(all_tb), self.dbname))
+        # column_name = '{}_TABLES'.format(self.dbname)
+        # df = pd.DataFrame({column_name : all_tb})
+        # try:
+        #     df.to_csv(column_name+'.csv', index=False)
+        # except Exception as e:
+        #     input('CSV already openned please close it..\n {}'.format(e))
+        #     sys.exit()
+        #print('{} tables in {}\n'.format(len(all_tb), self.dbname))
         return all_tb
-        
-        
-        
+
+
+
     def drop_tablefrom_db(self, table_name):
         #Using the cursor created in connect_db func executes statement
-        connection = sqlite3.connect(self.dbname)
-        cursor = connection.cursor()
+        connection, cursor = Df2db(self.dbname, self.root_path).connect_db()
+        if connection == False: return cursor
         query = 'DROP TABLE {};'.format(table_name)
         try:
             cursor.execute(query)
@@ -217,8 +252,8 @@ class Df2db:
             print("Table does not exist!\nPress Enter to exit...")
             input(e)
             sys.exit()
-    
-    
+
+
     def getfilespath_from(self):
         #Walk thru a start path and return a list of paths to files
         allfiles = []
@@ -228,7 +263,7 @@ class Df2db:
                 allfiles.append(path_tofile)
         return allfiles
 
-    
+
     def get_dfpaths(self):
         #get a list of paths to excel files (.xlsx, .xls, .xlsm, .csv, .txt)
         paths_tofiles = Df2db(self.dbname, self.root_path).getfilespath_from()
@@ -241,33 +276,33 @@ class Df2db:
             if tempfile == "~$": # if file open then append to list the path
                 print('This file {} is open'.format(path))
                 files_with_issues.append(path)
-                
+
             elif re.search('.xls', file) or re.search('.csv', file) or re.search('.txt',  file):
-                filtered_extensions.append(path)   
-        
+                filtered_extensions.append(path)
+
         #Create a txt file with files that where open
         if len(files_with_issues) == 0:
             pass
         else:
-            files_with_errors = '\n'.join(files_with_issues) 
+            files_with_errors = '\n'.join(files_with_issues)
             error_file = open("Files that were open.txt", 'w')
             error_file.write(files_with_errors)
             error_file.close()
-        
+
         return filtered_extensions
-    
-    
+
+
     def dfs_tosql(self):
         #Run thru alldfs and save them to db
         path_to_dfs = Df2db(self.dbname, self.root_path).get_dfpaths()
-        print('\nThere are ',len(path_to_dfs), ' files to be added..\n\n')
+        #print('\nThere are ',len(path_to_dfs), ' files to be added..\n\n')
         for df in path_to_dfs:
             #print(df)
             Df2db(self.dbname, self.root_path).df_tosql(df)
         #tab = Df2db(self.dbname, self.root_path).show_db_tables()
-        
+
 # #### Instantiating the class
-# todf = Df2db('mydata.db', r'E:\sqlite3')      
+# todf = Df2db('mydata.db', r'E:\sqlite3')
 
 
 # # In[4]:
@@ -317,7 +352,7 @@ from df2db import Df2db
 #Instantiate with the database name and the path where you got excel files
 todf = Df2db('dbname.db', r'D:\alot_of_xlfiles')
 
-#Call dfs_tosql function to search in the path you give for excel files 
+#Call dfs_tosql function to search in the path you give for excel files
 #and save them to the database with the name given
 todf.dfs_tosql()
 
@@ -349,7 +384,7 @@ df = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
 #Save it to sql, you must give the df and a name for the df
 todf.df_tosql(df, 'test')
 
-#Show current tables from db 
+#Show current tables from db
 todf.show_db_tables()
 #Close when you are done
 todf.close()
@@ -360,7 +395,7 @@ tablname.split('_')
 
 
 'EXCEL' - all tables in db will start with this prefix
-'test' - the name if the excel or df 
+'test' - the name if the excel or df
 'xlsx' - the extension of the file
 'SHEET' - the next folowing this will be the Sheet name of the excel
 That's because it looks in the workbook in all sheets for tables and saves the sheet name also
@@ -371,4 +406,3 @@ This replace is done in order to be compatible with sqlite3 database
 Also, if the column names contains spaces those will be replaced with "_"
 
 """
-
